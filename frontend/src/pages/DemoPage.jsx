@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Building2, UserCheck, Shield, FileText, Upload, Trash2, Send, 
@@ -65,6 +65,30 @@ export default function DemoPage({ setActiveTab, defaultRole, defaultTab }) {
   const [chatInput, setChatInput] = useState('');
   const [isQuerying, setIsQuerying] = useState(false);
   const [latestSecurityTrace, setLatestSecurityTrace] = useState(null);
+
+  // Auto-scroll chat to latest message / response
+  const messagesContainerRef = useRef(null);
+  const chatBottomRef = useRef(null);
+  const chatInputRef = useRef(null);
+
+  const scrollToBottom = (behavior = 'smooth') => {
+    if (chatBottomRef.current) {
+      chatBottomRef.current.scrollIntoView({ behavior, block: 'end' });
+    } else if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior
+      });
+    }
+  };
+
+  useEffect(() => {
+    // Scroll immediately on new messages or query status change
+    scrollToBottom('smooth');
+    // Secondary scroll to account for dynamic citation expansions and DOM measurement
+    const timer = setTimeout(() => scrollToBottom('smooth'), 80);
+    return () => clearTimeout(timer);
+  }, [chatMessages, isQuerying]);
 
   // Initial load
   useEffect(() => {
@@ -1430,8 +1454,8 @@ export default function DemoPage({ setActiveTab, defaultRole, defaultTab }) {
               </div>
 
               {/* Chat Message Window */}
-              <div className="boxy-card border-white/20 p-5 h-[460px] flex flex-col justify-between">
-                <div className="overflow-y-auto space-y-4 pr-2 flex-1">
+              <div className="boxy-card border-white/20 p-5 h-[480px] flex flex-col justify-between">
+                <div ref={messagesContainerRef} className="overflow-y-auto space-y-4 pr-2 flex-1 scroll-smooth">
                   {chatMessages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center p-6 text-neutral-500">
                       <Shield size={36} className="text-neutral-600 mb-3" />
@@ -1497,6 +1521,8 @@ export default function DemoPage({ setActiveTab, defaultRole, defaultTab }) {
                       <span>Executing Pre-Retrieval Gate & Similarity Search in PGVector...</span>
                     </div>
                   )}
+                  {/* Auto-scroll target anchor */}
+                  <div ref={chatBottomRef} className="h-1 w-full" />
                 </div>
 
                 {/* Input Bar */}
@@ -1508,6 +1534,7 @@ export default function DemoPage({ setActiveTab, defaultRole, defaultTab }) {
                   className="mt-4 pt-3 border-t border-white/10 flex items-center gap-2"
                 >
                   <input
+                    ref={chatInputRef}
                     type="text"
                     value={chatInput}
                     onChange={e => setChatInput(e.target.value)}
