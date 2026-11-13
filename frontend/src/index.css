@@ -14,21 +14,23 @@ body {
   overflow-x: hidden;
 }
 
-/* Boxy aesthetic utilities */
-.boxy-btn {
-  @apply inline-flex items-center justify-center px-4 py-2 border border-white/20 bg-black text-white text-xs font-mono tracking-wider uppercase transition-all duration-150 hover:bg-white hover:text-black hover:border-white active:bg-neutral-200 disabled:opacity-40 disabled:cursor-not-allowed rounded-none;
-}
+/* Boxy aesthetic utilities wrapped in components layer so utilities (bg-white, text-black) override cleanly */
+@layer components {
+  .boxy-btn {
+    @apply inline-flex items-center justify-center px-4 py-2 border border-white/20 bg-black text-white text-xs font-mono tracking-wider uppercase transition-all duration-150 hover:bg-white hover:text-black hover:border-white active:bg-neutral-200 disabled:opacity-40 disabled:cursor-not-allowed rounded-none;
+  }
 
-.boxy-btn-primary {
-  @apply inline-flex items-center justify-center px-4 py-2 border border-white bg-white text-black text-xs font-mono tracking-wider uppercase font-semibold transition-all duration-150 hover:bg-neutral-200 hover:border-neutral-200 active:bg-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed rounded-none;
-}
+  .boxy-btn-primary {
+    @apply inline-flex items-center justify-center px-4 py-2 border border-white bg-white text-black text-xs font-mono tracking-wider uppercase font-semibold transition-all duration-150 hover:bg-neutral-200 hover:border-neutral-200 active:bg-neutral-300 disabled:opacity-40 disabled:cursor-not-allowed rounded-none;
+  }
 
-.boxy-card {
-  @apply border border-white/10 bg-neutral-950 p-5 rounded-none relative transition-colors duration-200;
-}
+  .boxy-card {
+    @apply border border-white/10 bg-neutral-950 p-5 rounded-none relative transition-colors duration-200;
+  }
 
-.boxy-input {
-  @apply w-full bg-black border border-white/20 px-3.5 py-2.5 text-sm text-white font-mono placeholder:text-neutral-600 focus:outline-none focus:border-white rounded-none;
+  .boxy-input {
+    @apply w-full bg-black border border-white/20 px-3.5 py-2.5 text-sm text-white font-mono placeholder:text-neutral-600 focus:outline-none focus:border-white rounded-none;
+  }
 }
 
 /* Custom scrollbars */

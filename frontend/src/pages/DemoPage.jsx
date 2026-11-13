@@ -197,11 +197,27 @@ export default function DemoPage({ setActiveTab, defaultRole, defaultTab }) {
     navigate(`/demo/${slug}/admin/documents`);
   }
 
+  // Handle User Choosing a Specific Role directly from Step 1
+  function handleChooseCompanyRole(tenantId, roleSlug) {
+    const slug = tenantId === 'tenant_amazon' ? 'amazon' : 'nexus';
+    setSelectedTenantId(tenantId);
+    setTenantSelected(true);
+    setChatMessages([]);
+    setLatestSecurityTrace(null);
+    if (roleSlug === 'admin') {
+      navigate(`/demo/${slug}/admin/documents`);
+    } else {
+      navigate(`/demo/${slug}/${roleSlug}`);
+    }
+  }
+
   // Handle Switching Role
   function handleSelectRole(roleId) {
     setSelectedRoleId(roleId);
-    const r = roles.find(item => item.id === roleId);
-    const user = employees.find(e => e.role_id === roleId);
+    setChatMessages([]);
+    setLatestSecurityTrace(null);
+    const r = roles.find(item => item.id === roleId || item.slug === roleId);
+    const user = employees.find(e => e.role_id === roleId || (r && e.role_id === r.id));
     if (user) {
       setCurrentEmployee(user);
     } else if (r) {
@@ -551,19 +567,55 @@ export default function DemoPage({ setActiveTab, defaultRole, defaultTab }) {
 
               <div className="mt-6 pt-4 border-t border-white/10 space-y-1.5 font-mono text-[11px] text-neutral-400">
                 <div className="text-white font-semibold uppercase text-[10px] tracking-wider mb-2">
-                  Four Configured Roles:
+                  Four Configured Roles (Click to Test):
                 </div>
-                <div className="flex items-center gap-2 text-neutral-300">
-                  <Shield size={12} className="text-white" /> 1. Tenant Administrator (Elena Rostova)
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleChooseCompanyRole('tenant_nexus', 'admin');
+                  }}
+                  className="flex items-center justify-between p-1.5 hover:bg-white hover:text-black border border-transparent hover:border-white text-neutral-300 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Shield size={12} /> 1. Tenant Administrator (Elena Rostova)
+                  </div>
+                  <span className="text-[9px] uppercase tracking-wider font-bold">&rarr; Test Role</span>
                 </div>
-                <div className="flex items-center gap-2 text-neutral-300">
-                  <UserCheck size={12} /> 2. Tech Employee (Devon Vance)
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleChooseCompanyRole('tenant_nexus', 'tech');
+                  }}
+                  className="flex items-center justify-between p-1.5 hover:bg-white hover:text-black border border-transparent hover:border-white text-neutral-300 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <UserCheck size={12} /> 2. Tech Employee (Devon Vance)
+                  </div>
+                  <span className="text-[9px] uppercase tracking-wider font-bold">&rarr; Test Role</span>
                 </div>
-                <div className="flex items-center gap-2 text-neutral-300">
-                  <UserCheck size={12} /> 3. Finance Employee (Marcus Sterling)
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleChooseCompanyRole('tenant_nexus', 'finance');
+                  }}
+                  className="flex items-center justify-between p-1.5 hover:bg-white hover:text-black border border-transparent hover:border-white text-neutral-300 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <UserCheck size={12} /> 3. Finance Employee (Marcus Sterling)
+                  </div>
+                  <span className="text-[9px] uppercase tracking-wider font-bold">&rarr; Test Role</span>
                 </div>
-                <div className="flex items-center gap-2 text-neutral-300">
-                  <UserCheck size={12} /> 4. Business Analyst (Sarah Chen)
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleChooseCompanyRole('tenant_nexus', 'analyst');
+                  }}
+                  className="flex items-center justify-between p-1.5 hover:bg-white hover:text-black border border-transparent hover:border-white text-neutral-300 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <UserCheck size={12} /> 4. Business Analyst (Sarah Chen)
+                  </div>
+                  <span className="text-[9px] uppercase tracking-wider font-bold">&rarr; Test Role</span>
                 </div>
               </div>
             </div>
@@ -600,19 +652,55 @@ export default function DemoPage({ setActiveTab, defaultRole, defaultTab }) {
 
               <div className="mt-6 pt-4 border-t border-white/10 space-y-1.5 font-mono text-[11px] text-neutral-400">
                 <div className="text-white font-semibold uppercase text-[10px] tracking-wider mb-2">
-                  Four Configured Roles:
+                  Four Configured Roles (Click to Test):
                 </div>
-                <div className="flex items-center gap-2 text-neutral-300">
-                  <Shield size={12} className="text-white" /> 1. Tenant Administrator (David Miller)
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleChooseCompanyRole('tenant_amazon', 'admin');
+                  }}
+                  className="flex items-center justify-between p-1.5 hover:bg-white hover:text-black border border-transparent hover:border-white text-neutral-300 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Shield size={12} /> 1. Tenant Administrator (David Miller)
+                  </div>
+                  <span className="text-[9px] uppercase tracking-wider font-bold">&rarr; Test Role</span>
                 </div>
-                <div className="flex items-center gap-2 text-neutral-300">
-                  <UserCheck size={12} /> 2. Tech Employee (Kaelen Ross)
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleChooseCompanyRole('tenant_amazon', 'tech');
+                  }}
+                  className="flex items-center justify-between p-1.5 hover:bg-white hover:text-black border border-transparent hover:border-white text-neutral-300 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <UserCheck size={12} /> 2. Tech Employee (Kaelen Ross)
+                  </div>
+                  <span className="text-[9px] uppercase tracking-wider font-bold">&rarr; Test Role</span>
                 </div>
-                <div className="flex items-center gap-2 text-neutral-300">
-                  <UserCheck size={12} /> 3. Finance Employee (Chloe Dupont)
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleChooseCompanyRole('tenant_amazon', 'finance');
+                  }}
+                  className="flex items-center justify-between p-1.5 hover:bg-white hover:text-black border border-transparent hover:border-white text-neutral-300 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <UserCheck size={12} /> 3. Finance Employee (Chloe Dupont)
+                  </div>
+                  <span className="text-[9px] uppercase tracking-wider font-bold">&rarr; Test Role</span>
                 </div>
-                <div className="flex items-center gap-2 text-neutral-300">
-                  <UserCheck size={12} /> 4. Business Analyst (Tariq Mansoor)
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleChooseCompanyRole('tenant_amazon', 'analyst');
+                  }}
+                  className="flex items-center justify-between p-1.5 hover:bg-white hover:text-black border border-transparent hover:border-white text-neutral-300 cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <UserCheck size={12} /> 4. Business Analyst (Tariq Mansoor)
+                  </div>
+                  <span className="text-[9px] uppercase tracking-wider font-bold">&rarr; Test Role</span>
                 </div>
               </div>
             </div>
@@ -665,36 +753,54 @@ export default function DemoPage({ setActiveTab, defaultRole, defaultTab }) {
           </div>
 
           {/* Active Identity Details */}
-          <div className="flex items-center gap-3 font-mono text-xs bg-neutral-900 border border-white/15 px-3.5 py-1.5 rounded-none">
+          <div className="flex flex-wrap items-center gap-3 font-mono text-xs bg-neutral-900 border border-white/20 px-3.5 py-1.5 rounded-none">
             <span className="text-neutral-400">Authenticated:</span>
             <span className="text-white font-semibold">{currentEmployee?.name || 'Loading...'}</span>
             <span className="text-neutral-600">|</span>
-            <span className="px-1.5 py-0.5 bg-neutral-800 text-neutral-200 border border-neutral-700 text-[10px] uppercase">
+            <span className="text-neutral-400">Testing From Role:</span>
+            <span className="px-2.5 py-1 !bg-white !text-black bg-white text-black border !border-white border-white text-[11px] uppercase font-extrabold tracking-wider shadow-sm flex items-center gap-1.5">
+              <UserCheck size={13} className="!text-black text-black" />
               {currentEmployee?.role_name || 'Admin'}
             </span>
           </div>
         </div>
 
         {/* Roles Switcher Bar (Dynamic count: 4 initial + any custom created roles) */}
-        <div className="max-w-7xl mx-auto mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center gap-2">
+        <div className="max-w-7xl mx-auto mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center gap-2.5">
           <span className="font-mono text-xs uppercase text-neutral-400 tracking-wider flex items-center gap-1.5 mr-2">
             <UserCheck size={14} className="text-white" /> Roles ({roles.length}):
           </span>
           {roles.map(r => {
-            const isSelected = selectedRoleId === r.id;
+            const isSelected = Boolean(
+              (selectedRoleId && (selectedRoleId === r.id || selectedRoleId === r.slug)) ||
+              (currentEmployee && currentEmployee.role_id === r.id) ||
+              (effectiveRoleSlug && (r.slug.toLowerCase() === effectiveRoleSlug.toLowerCase() || (r.is_admin && effectiveRoleSlug.toLowerCase() === 'admin')))
+            );
             return (
               <button
                 key={r.id}
                 onClick={() => handleSelectRole(r.id)}
-                className={`boxy-btn py-1.5 px-3.5 text-xs flex items-center gap-1.5 transition-colors ${
+                className={`py-2 px-4 text-xs font-mono uppercase tracking-wider flex items-center gap-2 transition-all duration-150 border rounded-none cursor-pointer ${
                   isSelected
-                    ? 'bg-white text-black border-white font-bold'
-                    : 'bg-black text-neutral-300 border-white/15 hover:border-white/40'
+                    ? '!bg-white !text-black !border-white bg-white text-black border-white font-extrabold shadow-lg shadow-white/20 ring-2 ring-white ring-offset-2 ring-offset-black scale-105 z-10'
+                    : 'bg-black text-neutral-300 border-white/20 hover:text-white hover:border-white/60 hover:bg-neutral-900'
                 }`}
               >
-                {r.is_admin ? <Shield size={12} /> : <UserCheck size={12} />}
+                {r.is_admin ? (
+                  <Shield size={13} className={isSelected ? '!text-black text-black' : 'text-neutral-400'} />
+                ) : (
+                  <UserCheck size={13} className={isSelected ? '!text-black text-black' : 'text-neutral-400'} />
+                )}
                 <span>{r.name}</span>
-                {r.is_admin && <span className="text-[9px] uppercase tracking-wider ml-1 opacity-70">[Admin]</span>}
+                {isSelected ? (
+                  <span className="px-1.5 py-0.5 !bg-black !text-white bg-black text-white text-[9px] font-mono tracking-widest uppercase font-bold ml-1">
+                    TESTING
+                  </span>
+                ) : r.is_admin ? (
+                  <span className="text-[9px] uppercase tracking-wider opacity-60 ml-1">
+                    [Admin]
+                  </span>
+                ) : null}
               </button>
             );
           })}
@@ -1118,33 +1224,62 @@ export default function DemoPage({ setActiveTab, defaultRole, defaultTab }) {
                     </div>
 
                     <div className="space-y-2">
-                      {roles.map(r => (
-                        <div
-                          key={r.id}
-                          className="p-3 border border-white/10 bg-neutral-950 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-                        >
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-xs font-bold text-white uppercase">{r.name}</span>
-                              {r.is_admin ? (
-                                <span className="px-1 py-0.2 bg-white text-black font-mono text-[9px] uppercase font-bold">
-                                  Admin
-                                </span>
-                              ) : (
-                                <span className="px-1 py-0.2 bg-neutral-800 text-neutral-300 font-mono text-[9px] uppercase border border-neutral-700">
-                                  Standard
-                                </span>
-                              )}
+                      {roles.map(r => {
+                        const isSelected = Boolean(
+                          (selectedRoleId && (selectedRoleId === r.id || selectedRoleId === r.slug)) ||
+                          (currentEmployee && currentEmployee.role_id === r.id) ||
+                          (effectiveRoleSlug && (r.slug.toLowerCase() === effectiveRoleSlug.toLowerCase() || (r.is_admin && effectiveRoleSlug.toLowerCase() === 'admin')))
+                        );
+                        return (
+                          <div
+                            key={r.id}
+                            onClick={() => handleSelectRole(r.id)}
+                            className={`p-3.5 border flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-all duration-150 ${
+                              isSelected
+                                ? '!bg-white !text-black bg-white text-black !border-white border-white font-semibold shadow-md ring-2 ring-white ring-offset-2 ring-offset-black'
+                                : 'bg-neutral-950 border-white/10 hover:border-white/40 text-neutral-300 hover:bg-neutral-900'
+                            }`}
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className={`font-mono text-xs font-bold uppercase ${isSelected ? '!text-black text-black' : 'text-white'}`}>{r.name}</span>
+                                {isSelected && (
+                                  <span className="px-1.5 py-0.5 !bg-black !text-white bg-black text-white font-mono text-[9px] uppercase font-bold tracking-wider">
+                                    Active Testing Role
+                                  </span>
+                                )}
+                                {r.is_admin ? (
+                                  <span className={`px-1.5 py-0.5 font-mono text-[9px] uppercase font-bold ${isSelected ? '!bg-neutral-200 !text-black border border-black/20' : '!bg-white !text-black'}`}>
+                                    Admin
+                                  </span>
+                                ) : (
+                                  <span className={`px-1.5 py-0.5 font-mono text-[9px] uppercase border ${isSelected ? '!bg-neutral-200 !text-black border-black/20' : 'bg-neutral-800 text-neutral-300 border-neutral-700'}`}>
+                                    Standard
+                                  </span>
+                                )}
+                              </div>
+                              <p className={`text-[11px] font-sans mt-1 ${isSelected ? '!text-neutral-900 text-neutral-900 font-medium' : 'text-neutral-400'}`}>
+                                {r.description}
+                              </p>
                             </div>
-                            <p className="text-[11px] text-neutral-400 font-sans mt-0.5">
-                              {r.description}
-                            </p>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className={`font-mono text-[10px] ${isSelected ? '!text-neutral-800 text-neutral-800' : 'text-neutral-500'}`}>
+                                Slug: <code className={isSelected ? 'text-black font-bold' : 'text-neutral-300'}>{r.slug}</code>
+                              </span>
+                              <button
+                                type="button"
+                                className={`text-[10px] font-mono uppercase px-2.5 py-1 border transition-colors ${
+                                  isSelected
+                                    ? '!bg-black !text-white !border-black bg-black text-white border-black font-bold'
+                                    : 'bg-neutral-900 text-neutral-300 border-white/20 hover:bg-white hover:text-black hover:border-white'
+                                }`}
+                              >
+                                {isSelected ? 'Active' : 'Test This Role'}
+                              </button>
+                            </div>
                           </div>
-                          <div className="font-mono text-[10px] text-neutral-500 shrink-0">
-                            Slug: <code className="text-neutral-300">{r.slug}</code>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -1264,23 +1399,32 @@ export default function DemoPage({ setActiveTab, defaultRole, defaultTab }) {
             {/* Left: Chat Session Window */}
             <div className="lg:col-span-7 space-y-4">
               {/* Employee Scope Header */}
-              <div className="boxy-card border-white/20 p-4 flex items-center justify-between">
+              <div className="boxy-card border-white/20 p-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-white text-black flex items-center justify-center font-mono font-bold text-sm">
+                  <div className="w-9 h-9 !bg-white !text-black bg-white text-black flex items-center justify-center font-mono font-bold text-sm shadow-sm">
                     {currentEmployee?.name?.charAt(0) || 'U'}
                   </div>
                   <div>
-                    <h3 className="font-mono font-bold text-xs uppercase text-white">
-                      {currentEmployee?.name}
-                    </h3>
-                    <span className="font-mono text-[11px] text-neutral-400 block">
-                      Role: <strong className="text-white">{currentEmployee?.role_name}</strong> &middot; Tenant: <strong className="text-white">{currentTenant?.name}</strong>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-mono font-bold text-xs uppercase text-white">
+                        {currentEmployee?.name}
+                      </h3>
+                      <span className="px-2 py-0.5 !bg-white !text-black bg-white text-black font-mono text-[10px] uppercase font-extrabold border border-white shadow-sm flex items-center gap-1">
+                        <UserCheck size={11} className="!text-black text-black" />
+                        Testing as: {currentEmployee?.role_name}
+                      </span>
+                    </div>
+                    <span className="font-mono text-[11px] text-neutral-400 block mt-0.5">
+                      Clearance: <code className="text-neutral-200 uppercase font-semibold">{currentEmployee?.role_name} Domain</code> &middot; Tenant: <strong className="text-white">{currentTenant?.name}</strong>
                     </span>
                   </div>
                 </div>
 
                 <div className="text-right font-mono text-[10px] text-neutral-400">
-                  <span className="text-emerald-400 block font-semibold">PRE-RETRIEVAL GATE ACTIVE</span>
+                  <span className="text-emerald-400 block font-semibold flex items-center gap-1.5 justify-end">
+                    <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></span>
+                    PRE-RETRIEVAL GATE ACTIVE
+                  </span>
                   <span>PGVECTOR CONSTRAINED</span>
                 </div>
               </div>
