@@ -1,0 +1,1135 @@
+PRODUCT DESCRIPTION& PRODUCT REQUIREMENTS DOCUMENT
+
+Tenant-Isolated Enterprise Knowledge Assistant
+
+MVP Scope  |  Version 1.0  |  9 November 2026
+
+Working product definition for the first demonstrable release
+
+PRODUCT PURPOSEAllow each company to manage its own internal knowledge documents and give employees role-appropriate answers without exposing documents assigned to other roles or tenants.
+
+Document status: MVP product and engineering baseline. Items marked as future work are not required for the first release.
+
+1. Executive Summary
+
+The Tenant-Isolated Enterprise Knowledge Assistant is a web application through which a company can provide employees with question-answering access to internal policies, procedures, and reference documents. Each participating company is represented as a tenant. A company administrator manages that tenant, uploads documents once, assigns each document to the employee role or roles allowed to read it, and creates or manages employee accounts.
+
+For the MVP, the example tenant is Company ABC. Company ABC has one Tenant Administrator and employees assigned to roles such as Tech Employee, Finance Employee, and Business Analyst. When an employee asks a question, the backend identifies the employee and their tenant and role, retrieves only the document chunks permitted for that role, and then sends the authorized context to a locally hosted model through Ollama. The answer is generated from that allowed context.
+
+The central product rule is: tenant and role authorization must be applied before retrieved content is passed to the language model. A system prompt may remind the model to respect the user role, but it is not the security boundary. The database query and backend authorization logic enforce which chunks can be retrieved.
+
+2. Product Description
+
+2.1 Product vision
+
+Give employees a simple, role-aware way to ask questions about their company’s internal knowledge, while allowing the company administrator to manage documents and decide which employee roles may access them.
+
+2.2 What the product provides
+
+A public main page that explains the product, what it provides, and how companies use it.
+
+A tenant workspace for each participating company, with Company ABC used as the demonstrator tenant.
+
+A company-admin dashboard for creating roles, managing employees, uploading documents, and assigning document access.
+
+Role-based employee access for Tech Employees, Finance Employees, and Business Analysts.
+
+Document extraction, application-side chunking, local embedding generation, and vector storage.
+
+A chat interface that answers questions using only chunks authorized for the authenticated employee.
+
+Tenant- and role-aware conversation handling and basic audit events.
+
+2.3 Problem being addressed
+
+Company policies and internal procedures may apply only to particular employee groups. A technical employee may need engineering standards and IT procedures, while a finance employee may need reimbursement and payment policies. A basic RAG chatbot that searches all documents in a shared collection can return information that is relevant to the question but not permitted for the employee. The product prevents this by attaching tenant and role-access metadata to indexed chunks and applying those restrictions during retrieval.
+
+2.4 Product boundary
+
+The MVP demonstrates one tenant workspace with a design that supports multiple tenants. Company ABC is the example company, not a hard-coded special case. Each tenant has its own tenant identifier, users, role definitions, documents, chunks, and conversations. The first demonstration may use a small number of tenant environments, but the data and authorization model must not assume that all users belong to Company ABC.
+
+3. Tenant Model and Identity
+
+3.1 Tenant definition
+
+A tenant is one customer company using the platform. For example, Company ABC is one tenant. Its Tenant Administrator and all employees are members of the same tenant, but their role assignments determine which role-scoped documents they can retrieve.
+
+3.2 Tenant identifier
+
+When a company tenant is created, the backend generates a unique, random, non-guessable tenant identifier (preferably a UUID). This tenant_id is stored with tenant-owned records and is attached to each document and chunk during ingestion. It is also used in server-side tenant resolution and retrieval filtering.
+
+The tenant_id is an identifier, not a password or authorization token. Employees should not gain access merely by knowing or typing the tenant_id. The administrator invites or registers an employee through a tenant invitation or enrollment process; after authentication, the backend binds that user account to the tenant. If a join code is used, it must be a separate, revocable invitation credential. The actual tenant_id is resolved by the server from the authenticated user’s membership.
+
+3.3 Tenant boundary
+
+A user account belongs to a tenant through a server-side membership record.
+
+A tenant’s admin can manage only that tenant’s employees, roles, and documents.
+
+A tenant’s employee can retrieve only chunks belonging to that tenant and allowed for the employee’s assigned role.
+
+The tenant_id is stored on document and chunk metadata even when separate databases are used, providing an additional consistency check.
+
+The backend must not trust tenant_id values supplied only in a browser request or natural-language prompt.
+
+4. MVP Roles and Responsibilities
+
+The MVP has four primary role types. The Tenant Administrator is the company administrator for one tenant; this person is not the platform operator for all customer companies. The three employee roles represent the example departments and can be used as role templates for the Company ABC demonstration.
+
+Role
+
+Who uses it
+
+MVP capabilities
+
+Knowledge access
+
+Tenant Administrator
+
+Company ABC’s designated admin
+
+Manage tenant employees; create/manage tenant roles; upload documents; assign one or more allowed roles to each document; view document processing status; delete or re-index documents; test knowledge access within the tenant.
+
+Can manage all documents belonging to their own tenant. Admin access does not cross tenant boundaries.
+
+Tech Employee
+
+Employee assigned to the Tech Employee role
+
+Sign in; ask questions; view answers and allowed source references; access own conversation history.
+
+Only chunks assigned to Tech Employee or shared with all tenant employees.
+
+Finance Employee
+
+Employee assigned to the Finance Employee role
+
+Sign in; ask questions; view answers and allowed source references; access own conversation history.
+
+Only chunks assigned to Finance Employee or shared with all tenant employees.
+
+Business Analyst
+
+Employee assigned to the Business Analyst role
+
+Sign in; ask questions; view answers and allowed source references; access own conversation history.
+
+Only chunks assigned to Business Analyst or shared with all tenant employees.
+
+4.1 Role assignment rules
+
+Each employee has one active primary role in the initial MVP.
+
+The administrator can assign a user to one of the predefined roles and may create an additional tenant-specific role if needed.
+
+A role is a label plus a set of permitted product actions and document-access mappings; it is not just text inserted into a prompt.
+
+Changing an employee’s role must affect subsequent retrieval requests immediately after the updated membership/role record is committed.
+
+The Tenant Administrator can manage only users and role definitions inside their own tenant.
+
+4.2 Example Company ABC membership
+
+Tenant
+
+User example
+
+Assigned role
+
+Company ABC
+
+ABC Admin
+
+Tenant Administrator
+
+Company ABC
+
+Employee 001
+
+Tech Employee
+
+Company ABC
+
+Employee 002
+
+Finance Employee
+
+Company ABC
+
+Employee 003
+
+Business Analyst
+
+5. Main Pages and MVP User Interface
+
+5.1 Public main page / About page
+
+The public landing page introduces the product before a user enters a tenant workspace. It explains what the platform provides, the problem it solves, its main capabilities, and the basic security model. It must not display customer documents or tenant-specific information.
+
+Product overview and value proposition.
+
+What the platform provides: company document management, role-aware knowledge search, and AI-generated answers grounded in permitted sources.
+
+How it works: a company admin uploads and assigns documents; employees ask questions; only role-authorized content is retrieved.
+
+High-level security explanation covering tenant separation and role-based document access.
+
+Sign-in or company invitation entry point.
+
+5.2 Tenant workspace — example: Company ABC
+
+After sign-in, the user is routed to the tenant workspace resolved from their authenticated membership. The page displays the tenant name and the features allowed for the current role. The same workspace structure can be reused for other tenants; the tenant data and permissions are loaded dynamically.
+
+5.3 Tenant Administrator dashboard
+
+Tenant overview: company name, tenant status, and basic document/user counts.
+
+Employee management: create or invite employees, activate/deactivate accounts, and assign a role.
+
+Role management: view predefined roles and create a tenant-specific role when required by the company.
+
+Document management: upload a document once, provide its title/description, select allowed role(s) or “All tenant employees,” and submit it for processing.
+
+Ingestion status: show queued, processing, indexed, failed, or deleted states.
+
+Document list: show document name, upload date, selected roles, processing status, and available actions.
+
+Tenant-scoped knowledge test: allow the administrator to ask a question against the documents they administer, subject to tenant-level admin policy.
+
+5.4 Employee workspace
+
+Show the employee name, company tenant, and assigned role.
+
+Provide a chat interface for policy and document questions.
+
+Show answers with source document title and page/section references where available.
+
+Show the employee’s own conversation history.
+
+If no authorized evidence is found, explain that no information is available within the employee’s permitted knowledge scope without exposing restricted document names or contents.
+
+The Tech Employee, Finance Employee, and Business Analyst can use the same UI component. Their accessible knowledge differs because the backend retrieves chunks based on the employee’s assigned role; separate hard-coded frontends are not required.
+
+6. Document Upload and Role-Scoped Knowledge
+
+6.1 Upload once; assign access by role
+
+The administrator uploads a source document once. During upload, the administrator selects the employee role or roles allowed to access that document. The platform does not require a separate duplicate upload for every employee. For example, a technical policy document can be uploaded once and assigned to Tech Employee. A finance policy document can be uploaded once and assigned to Finance Employee. A company-wide policy can be assigned to “All tenant employees.”
+
+A document can be assigned to one role, multiple roles, or all employee roles. The selected access scope is stored as metadata and inherited by the chunks produced from that document. In the initial MVP, access is assigned at document level; all chunks from a document inherit the same role scope. Fine-grained section-by-section permissions within a single mixed-audience document are outside the first MVP unless a concrete requirement is added.
+
+6.2 Processing pipeline: extraction, chunking, embedding, storage
+
+1.  The administrator uploads a supported document through the Company ABC tenant workspace.
+
+2.  The FastAPI backend validates the user, tenant membership, upload permission, file extension/type, and configured file-size limit.
+
+3.  The document-processing component extracts text from the file. Apache Tika may be used for PDF, DOCX, and other supported formats; supported formats must be verified in implementation tests.
+
+4.  The backend applies deterministic text chunking, using configured chunk size and overlap. Chunking is performed by the application text-splitting pipeline; it is not inherently an LLM task.
+
+5.  Each chunk is assigned metadata including tenant_id, document_id, document_version, allowed_role_ids (or equivalent mapping), source title, and page/section information where available.
+
+6.  A local Ollama embedding model converts each chunk into a vector embedding.
+
+7.  The chunk text, embedding, source metadata, tenant_id, and role-access mapping are stored in the tenant’s PostgreSQL database with pgvector enabled. PostgreSQL/pgvector can run as a Docker container for local development and the MVP deployment.
+
+8.  The administrator sees an indexed or failed status. Failed ingestion must not leave partially indexed content available to employees.
+
+6.3 Correct role for Ollama
+
+Ollama is used in the MVP to run local models. An embedding model is used to generate vectors for document chunks and query text. A local chat/generation model can be used to produce the final answer from authorized retrieved context. Text chunking itself is normally handled by the backend splitter after extraction. This separation makes chunk size, overlap, and metadata handling deterministic and testable.
+
+6.4 Docker and vector database
+
+Docker is used to pull and run the PostgreSQL image that includes the pgvector extension, or a compatible PostgreSQL/pgvector image. Docker runs the database service; PostgreSQL stores the actual chunk records, metadata, and vectors in a persistent volume. The vector data must survive container restarts. Ollama may run locally on the development host or as a separately managed container, depending on the development environment.
+
+7. Employee Query and Retrieval Workflow
+
+7.1 Required query flow
+
+1.  The employee signs in. The backend validates the authenticated identity.
+
+2.  The backend resolves the employee’s tenant_id and active role from server-side membership records.
+
+3.  The query is embedded using the same compatible embedding model used for document chunks.
+
+4.  The backend selects the correct tenant database and performs vector similarity search with mandatory tenant and role filters.
+
+5.  Only chunks matching tenant_id and the employee’s allowed role scope are returned.
+
+6.  The backend constructs the LLM context from those authorized chunks only.
+
+7.  A system instruction tells the local chat model to answer using the supplied evidence, not invent policy, and say when the authorized context is insufficient.
+
+8.  Ollama generates the answer. The backend returns the answer and available source references.
+
+9.  The question, answer, and source references are stored under the correct tenant and user, and only that user (or an explicitly authorized tenant admin) can access the conversation according to the MVP policy.
+
+7.2 Mandatory retrieval rule
+
+The effective retrieval condition is: the chunk must belong to the tenant resolved for the authenticated user AND the chunk must be assigned to the user’s role or to the “All tenant employees” scope. These conditions are applied in the backend/database query before the chunks are supplied to Ollama.
+
+Querying user
+
+Question example
+
+Expected retrieval scope
+
+Expected result
+
+Tech Employee
+
+“What is the laptop security policy?”
+
+Company ABC + Tech Employee + all-employee documents
+
+Return matching authorized technical or company-wide chunks.
+
+Tech Employee
+
+“What is the employee reimbursement policy?”
+
+Company ABC + Tech Employee + all-employee documents
+
+Do not retrieve Finance-only chunks. If no permitted source supports an answer, say no authorized information was found.
+
+Finance Employee
+
+“How do I submit a reimbursement?”
+
+Company ABC + Finance Employee + all-employee documents
+
+Return matching finance or company-wide chunks.
+
+Business Analyst
+
+“What is the reporting procedure?”
+
+Company ABC + Business Analyst + all-employee documents
+
+Return matching business-analyst or company-wide chunks.
+
+Any employee from another tenant
+
+“Show me Company ABC’s finance policy.”
+
+Only the other employee’s own tenant and role scope
+
+No Company ABC chunks may be retrieved or included in model context.
+
+7.3 System prompt is not the access-control boundary
+
+The model’s system instruction should include the user’s role context and direct the model to answer only from supplied authorized evidence. However, the role restriction must not depend on the model obeying that prompt. Unauthorized chunks must be removed by backend/database filtering before prompt construction. A system prompt cannot reliably protect a chunk that has already been supplied to the model.
+
+8. Functional Requirements
+
+ID
+
+Requirement
+
+Description
+
+Priority
+
+FR-01
+
+Public landing page
+
+The application shall display an About/What We Provide page and a sign-in or invitation entry point.
+
+Must
+
+FR-02
+
+Tenant creation
+
+The backend/platform setup shall create a tenant record with a unique server-generated tenant_id.
+
+Must
+
+FR-03
+
+Tenant membership
+
+An employee shall be linked to a tenant through a server-side membership record or controlled invitation flow.
+
+Must
+
+FR-04
+
+Authentication
+
+The backend shall validate identity before processing protected tenant operations.
+
+Must
+
+FR-05
+
+Role assignment
+
+The Tenant Administrator shall assign an employee one active primary role for the initial MVP.
+
+Must
+
+FR-06
+
+Role management
+
+The Tenant Administrator shall view the predefined roles and create a tenant-specific role if needed.
+
+Should
+
+FR-07
+
+Document upload
+
+The Tenant Administrator shall upload a supported document once and select allowed role(s) or all tenant employees.
+
+Must
+
+FR-08
+
+File validation
+
+The backend shall validate supported file type, file size, and upload permission.
+
+Must
+
+FR-09
+
+Text extraction
+
+The ingestion service shall extract text using Apache Tika or an equivalent parser.
+
+Must
+
+FR-10
+
+Chunking
+
+The backend shall split extracted text into chunks using configured size and overlap.
+
+Must
+
+FR-11
+
+Embedding
+
+The system shall use a local Ollama embedding model to generate vectors for chunks and queries.
+
+Must
+
+FR-12
+
+Vector storage
+
+The system shall persist chunk text, vector embeddings, tenant metadata, role metadata, and source information in PostgreSQL with pgvector.
+
+Must
+
+FR-13
+
+Role-constrained retrieval
+
+The retrieval query shall filter by server-resolved tenant_id and permitted role scope before returning context.
+
+Must
+
+FR-14
+
+Answer generation
+
+The system shall use an Ollama chat model to generate an answer from authorized retrieved context.
+
+Must
+
+FR-15
+
+Insufficient evidence handling
+
+The assistant shall state when it cannot find sufficient information in the user’s authorized knowledge scope.
+
+Must
+
+FR-16
+
+Source display
+
+The UI should display source document title and page/section reference where available.
+
+Should
+
+FR-17
+
+Conversation ownership
+
+Conversation history shall be scoped to the tenant and authenticated user.
+
+Must
+
+FR-18
+
+Document lifecycle
+
+The Tenant Administrator shall list and delete documents; deletion shall remove or invalidate related chunks and embeddings.
+
+Must
+
+FR-19
+
+Audit events
+
+The backend shall record key upload, role assignment, retrieval, access-denied, and deletion events.
+
+Should
+
+FR-20
+
+Fail-closed behavior
+
+Missing tenant membership, failed authorization, or database selection errors shall reject the protected request.
+
+Must
+
+9. Authorization and Data Rules
+
+9.1 Permission matrix
+
+Operation
+
+Tenant Admin
+
+Tech Employee
+
+Finance Employee
+
+Business Analyst
+
+View tenant overview
+
+Yes
+
+No
+
+No
+
+No
+
+Invite/manage tenant employees
+
+Yes
+
+No
+
+No
+
+No
+
+Create/manage tenant roles
+
+Yes
+
+No
+
+No
+
+No
+
+Upload and assign documents
+
+Yes
+
+No
+
+No
+
+No
+
+Delete/re-index tenant documents
+
+Yes
+
+No
+
+No
+
+No
+
+Ask knowledge questions
+
+Yes, within own tenant
+
+Yes
+
+Yes
+
+Yes
+
+Retrieve role-scoped content
+
+Tenant admin policy: all tenant documents
+
+Tech + all-employee
+
+Finance + all-employee
+
+Business Analyst + all-employee
+
+View own conversation history
+
+Yes
+
+Yes
+
+Yes
+
+Yes
+
+View another employee’s history
+
+Only if explicitly provided by MVP admin policy; default No
+
+No
+
+No
+
+No
+
+The role names in this matrix are the initial defaults for Company ABC. A tenant administrator may add a role, but new roles must be stored as tenant-scoped role records, assigned to users, and selectable when a document is uploaded. Custom roles do not bypass the same retrieval checks.
+
+9.2 Chunk metadata
+
+Field
+
+Purpose
+
+Example
+
+tenant_id
+
+Identifies the owning company tenant
+
+UUID generated when Company ABC is provisioned
+
+document_id
+
+Connects a chunk to its source document
+
+doc_abc_001
+
+document_version
+
+Supports re-indexing and stale-content invalidation
+
+3
+
+allowed_role_ids
+
+Defines which employee roles may retrieve the chunk
+
+[tech_employee] or [finance_employee, business_analyst]
+
+visibility_scope
+
+Supports role-specific or company-wide content
+
+ROLE_SCOPED / ALL_TENANT_EMPLOYEES
+
+chunk_index
+
+Maintains order within the source document
+
+12
+
+source_reference
+
+Supports answer citation or source display
+
+page 4 / section 2.1
+
+9.3 Retrieval rule (logical form)
+
+For an employee request, the retrieval query must enforce both tenant membership and role permission. Conceptually: tenant_id = authenticated_user.tenant_id AND (the chunk is assigned to authenticated_user.role_id OR the chunk has ALL_TENANT_EMPLOYEES visibility). Similarity ranking is applied only within this authorized candidate set. The exact SQL and schema may vary, but the access condition is mandatory.
+
+10. MVP Technical Architecture
+
+Component
+
+MVP choice
+
+Responsibility
+
+Frontend
+
+React
+
+Public About page, sign-in, tenant admin dashboard, employee chat interface
+
+Backend
+
+Python FastAPI
+
+Authentication integration, tenant resolution, role checks, upload, ingestion orchestration, retrieval, prompt construction, conversation persistence
+
+Document extraction
+
+Apache Tika or equivalent
+
+Extract text and source metadata from supported files
+
+Chunking
+
+Backend text splitter
+
+Split extracted text into deterministic chunks with configured overlap
+
+Local AI runtime
+
+Ollama
+
+Run local embedding model and local chat/generation model
+
+Database and vector search
+
+PostgreSQL + pgvector
+
+Store chunks, embeddings, role/tenant metadata, document records, and conversations
+
+Containerization
+
+Docker / Docker Compose
+
+Run PostgreSQL/pgvector and optionally other local services; persist database data using volumes
+
+10.1 Data isolation for MVP
+
+The intended deployment model is a dedicated PostgreSQL database for each tenant. For the first Company ABC demonstration, one database can represent Company ABC. Tenant-specific configuration selects the correct database after server-side membership resolution. If a multi-tenant test environment is used, it must create separate tenant database instances or schemas only if that alternative is explicitly documented; role filters alone must not be presented as equivalent to dedicated database isolation.
+
+10.2 Ollama responsibilities
+
+Embedding model: generates vector embeddings for document chunks and query text. The same embedding model/version and vector dimensionality must be used consistently for indexing and query embedding.
+
+Chat model: receives only the context returned by the authorized retrieval query and generates the natural-language response.
+
+Chunking: performed by the backend text-splitting code after extraction. Ollama is not required to divide the document into chunks.
+
+10.3 Docker responsibilities
+
+Docker pulls and runs a PostgreSQL image with pgvector enabled. PostgreSQL is the vector database; Docker is the container runtime, not the database itself. Database files must be persisted in a Docker volume so data survives a container restart. Ollama may run as a local host service or a separately managed container.
+
+11. Minimum Data Entities
+
+Entity
+
+Important fields (illustrative)
+
+Purpose
+
+Tenant
+
+tenant_id, tenant_name, status, database_reference
+
+Represents Company ABC or another company tenant
+
+User
+
+user_id, identity_subject, tenant_id, role_id, status
+
+Binds an authenticated user to one tenant and active role
+
+Role
+
+role_id, tenant_id, role_name, permissions
+
+Stores the predefined or tenant-created role
+
+Document
+
+document_id, tenant_id, title, owner_admin_id, version, status
+
+Represents the one uploaded source document
+
+DocumentRoleAccess
+
+document_id, role_id or ALL_TENANT_EMPLOYEES
+
+Maps one document to the role(s) permitted to access it
+
+DocumentChunk
+
+chunk_id, document_id, tenant_id, chunk_text, embedding, chunk_index, source_reference
+
+Stores chunks with inherited tenant and role access metadata
+
+Conversation
+
+conversation_id, tenant_id, user_id, created_at
+
+Stores employee conversation ownership
+
+Message
+
+message_id, conversation_id, role, content, source_refs, created_at
+
+Stores individual messages and sources
+
+AuditEvent
+
+event_id, tenant_id, actor_id, action, outcome, request_id, timestamp
+
+Records important administrative and security actions
+
+12. Security Requirements
+
+Threat / failure case
+
+Required MVP control
+
+Test
+
+Employee changes tenant_id in request
+
+Resolve tenant from authenticated server-side membership; do not trust browser-supplied tenant_id
+
+Modify request body/header/path and verify no tenant switching
+
+Tech employee asks for finance policy
+
+Filter finance-only chunks out before context construction
+
+Inspect retrieval results and actual model context
+
+Employee guesses document ID
+
+Check tenant and role permissions on every document operation
+
+Request another role’s document ID directly
+
+User guesses conversation ID
+
+Check tenant and owner on every history request
+
+Try another user’s conversation identifier
+
+Role changed by administrator
+
+Use current server-side role on every new query
+
+Reassign role and verify next query uses the new scope
+
+Document deleted
+
+Delete or invalidate all associated chunks and embeddings
+
+Query after deletion and verify no stale chunk is returned
+
+Tenant database unavailable
+
+Fail closed; do not route to another tenant database
+
+Simulate database outage
+
+Malicious instructions in document
+
+Treat retrieved text as untrusted; use prompt separation and optional input/retrieval/output guardrails
+
+Upload injection-like text and check behaviour
+
+Sensitive content in logs
+
+Avoid logging credentials, complete documents, or unnecessary full prompts
+
+Inspect logs generated during test queries
+
+A system prompt may say “answer only using authorized context” and may include the authenticated role as context. However, that prompt is only a model-behaviour instruction. It does not enforce permissions. The backend and database must exclude unauthorized chunks before the prompt is assembled.
+
+13. Acceptance Criteria and MVP Test Scenarios
+
+Test ID
+
+Scenario
+
+Expected result / acceptance evidence
+
+MVP-01
+
+Tenant Admin signs in to Company ABC
+
+Admin sees Company ABC tenant dashboard and admin-only functions
+
+MVP-02
+
+Admin creates/assigns Tech, Finance, and Business Analyst roles
+
+Roles appear in the employee and document-access selectors
+
+MVP-03
+
+Admin uploads one technical policy and assigns Tech Employee
+
+Document is processed once; chunks inherit Company ABC tenant_id and Tech role access
+
+MVP-04
+
+Admin uploads one finance policy and assigns Finance Employee
+
+Document is processed once; chunks inherit Company ABC tenant_id and Finance role access
+
+MVP-05
+
+Tech employee asks a question answered by the technical policy
+
+Only Tech and all-employee chunks are eligible and the answer cites the technical source where supported
+
+MVP-06
+
+Tech employee asks for finance-only policy
+
+Finance chunks are not retrieved or sent to Ollama; system reports no authorized evidence
+
+MVP-07
+
+Finance employee asks a finance policy question
+
+Finance and all-employee chunks are eligible
+
+MVP-08
+
+Business Analyst asks a BA policy question
+
+Business Analyst and all-employee chunks are eligible
+
+MVP-09
+
+Admin assigns one document to multiple roles
+
+A single indexed document is retrievable by each selected role, without duplicate document uploads
+
+MVP-10
+
+Employee attempts to change tenant_id or role in a request
+
+Backend ignores/rejects the manipulated value and uses server-side membership
+
+MVP-11
+
+Document is deleted
+
+Associated chunks/vectors no longer appear in subsequent retrieval
+
+MVP-12
+
+A second tenant is added for isolation test
+
+Company ABC users cannot retrieve the second tenant’s chunks, even if the question is identical
+
+13.1 MVP success definition
+
+The MVP is ready for demonstration when a company administrator can create or manage the four initial role types, add employees, upload a document once, assign its permitted role(s), and observe successful ingestion. Employees must be able to ask questions and receive answers only from documents assigned to their role or shared with all tenant employees. The decisive demonstration is that a Tech Employee asking for a Finance-only policy does not cause Finance chunks to enter the retrieval result or the Ollama prompt.
+
+14. Out of Scope for the MVP
+
+NVIDIA TensorRT-LLM, NVIDIA Dynamo, and dynamic routing across multiple inference engines.
+
+Agentic workflows that execute external actions, create tickets, approve payments, or modify enterprise systems.
+
+Advanced multi-agent orchestration and long-term agent memory.
+
+Neo4j or other knowledge graph retrieval, hybrid search, and advanced reranking.
+
+Audio, video, image, and other multimodal ingestion beyond text extraction supported by the chosen parsers.
+
+Large domain-specific canonical-intent libraries and complex NeMo Guardrails flows. Basic deterministic checks may be added, but guardrails are not the access-control layer.
+
+Advanced persona management. The MVP may display role-specific navigation, but personas do not grant permissions.
+
+Fine-grained different permissions for separate sections inside a single document. The MVP assigns access at document level and propagates that scope to all its chunks.
+
+Formal certification, claims of zero leakage, or claims of complete prompt-injection prevention.
+
+15. Assumptions and Open Decisions
+
+Item
+
+MVP assumption / decision to confirm
+
+Example tenant
+
+Company ABC is used as the first demonstrator tenant.
+
+Initial roles
+
+Tenant Administrator, Tech Employee, Finance Employee, and Business Analyst are seeded role types.
+
+Custom roles
+
+The admin may create a tenant-specific role; confirm whether this is required in the first demo or can be a post-core extension.
+
+Employee membership
+
+Use invitation or controlled enrollment; tenant_id itself is never a shared password.
+
+Document formats
+
+Start with PDF, DOCX, and TXT only after parser support is tested.
+
+Document scope
+
+One document may be assigned to one or multiple roles or all tenant employees; all chunks inherit the same document-level scope.
+
+Local models
+
+Select one Ollama embedding model and one Ollama chat model; record model names/versions and vector dimensions.
+
+Storage topology
+
+Use a dedicated PostgreSQL/pgvector database for Company ABC; define the approach for additional tenants before claiming multi-tenant deployment isolation.
+
+Role changes
+
+Current role is read from backend membership on every request; role updates affect subsequent requests.
+
+Conversation access
+
+Default employees can view their own conversations; tenant admin access to employee conversations should be explicitly approved rather than assumed.
+
+16. MVP Delivery Sequence
+
+Step
+
+Deliverable
+
+Definition of done
+
+1
+
+Public page and tenant workspace shell
+
+About page, sign-in route, Company ABC tenant workspace, role-aware navigation
+
+2
+
+Tenant, user, and role records
+
+Company ABC tenant_id generated server-side; admin and three employee roles represented; user membership enforced
+
+3
+
+Admin document workflow
+
+Admin uploads one document and selects permitted role(s); status is visible
+
+4
+
+Local ingestion pipeline
+
+Text extracted, chunked by backend, embedded by Ollama, indexed in Dockerized PostgreSQL/pgvector
+
+5
+
+Role-constrained chat
+
+Employee query is filtered by server-resolved tenant and role before context reaches Ollama
+
+6
+
+Conversation and audit
+
+History is tenant/user scoped; key operations produce structured audit events
+
+7
+
+Security verification
+
+Cross-role, cross-tenant, ID manipulation, deletion, and failure tests pass and are documented
+
+17. Product Principles
+
+The Tenant Administrator manages one company tenant, not the entire platform.
+
+A tenant ID is an identifier; authentication and server-side membership establish access.
+
+A document is uploaded once and assigned to one or more permitted roles.
+
+Every indexed chunk retains its tenant and role-access metadata.
+
+Role and tenant filters are applied before the LLM receives context.
+
+The model is instructed to answer from authorized evidence, but the model prompt is not the enforcement mechanism.
+
+Ollama provides local embedding and chat model execution; the backend performs document chunking.
+
+Docker runs the PostgreSQL/pgvector service; PostgreSQL persists the records and vectors.
+
+If authorization cannot be verified, the request is rejected rather than searched broadly.
+
+Appendix A. Illustrative Role-Scoped Retrieval Example
+
+Company ABC has uploaded a technical policy document and assigned it to Tech Employee, and a finance policy document and assigned it to Finance Employee. Each source file is processed once. Its chunks inherit the tenant identifier and the allowed-role mapping selected by the administrator.
+
+Authenticated user
+
+Resolved tenant
+
+Resolved role
+
+Retrieval filter
+
+What may reach Ollama
+
+Employee 001
+
+Company ABC tenant_id
+
+Tech Employee
+
+tenant_id = ABC AND (role = Tech OR visibility = ALL)
+
+Tech and company-wide chunks only
+
+Employee 002
+
+Company ABC tenant_id
+
+Finance Employee
+
+tenant_id = ABC AND (role = Finance OR visibility = ALL)
+
+Finance and company-wide chunks only
+
+Employee 003
+
+Company ABC tenant_id
+
+Business Analyst
+
+tenant_id = ABC AND (role = BA OR visibility = ALL)
+
+BA and company-wide chunks only
+
+If Employee 001 asks for a Finance-only policy, the retrieval query must return no Finance-only chunks. The system should not send those chunks to the model and then expect the system prompt to make the model ignore them.
+
+Appendix B. MVP Demo Script
+
+1.  Open the public About page and explain the product.
+
+2.  Sign in as Company ABC Tenant Administrator.
+
+3.  Show the seeded roles: Tech Employee, Finance Employee, and Business Analyst.
+
+4.  Create or invite one test employee for each role.
+
+5.  Upload a technical policy once and assign it to Tech Employee.
+
+6.  Upload a finance policy once and assign it to Finance Employee.
+
+7.  Show ingestion status and the document’s tenant/role metadata in the admin view or developer trace.
+
+8.  Sign in as the Tech Employee and ask a technical policy question; show its source.
+
+9.  Ask the Tech Employee for a Finance-only policy; show that Finance chunks were not retrieved or sent to Ollama.
+
+10.  Sign in as Finance Employee and ask the same finance question; show the permitted answer.
+
+11.  Optionally repeat with Business Analyst and then attempt a tenant-ID manipulation test.

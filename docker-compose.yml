@@ -1,0 +1,72 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: sentinelx-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - sentinelx-network
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  ollama-init:
+    image: ollama/ollama:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - "ollama pull llama3.2 && ollama pull nomic-embed-text"
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    volumes:
+      - ollama-data:/root/.ollama
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - sentinelx-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sentinelx-backend
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - HOST=0.0.0.0
+      - OLLAMA_BASE_URL=http://ollama:11434
+    volumes:
+      - ./backend/app:/app/app
+    depends_on:
+      ollama:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    networks:
+      - sentinelx-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sentinelx-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - sentinelx-network
+
+networks:
+  sentinelx-network:
+    driver: bridge
+
+volumes:
+  ollama-data:
