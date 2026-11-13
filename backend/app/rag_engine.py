@@ -269,7 +269,7 @@ class SentinelRAGEngine:
         authorized_chunks = []
         denied_chunks = []
 
-        # Check for cross-tenant query attempts
+        # Check for cross-tenant query attempts (Flow 13: tenant_isolation_verify)
         other_tenant_name = "Amazon" if "nexus" in user_tenant.lower() else "Nexus"
         is_cross_tenant_query = other_tenant_name.lower() in query.lower()
         if is_cross_tenant_query:
@@ -278,6 +278,25 @@ class SentinelRAGEngine:
                 status="ISOLATED",
                 detail=f"Query referenced external tenant ('{other_tenant_name}'). Pre-retrieval gate strictly confined candidates to '{user_tenant}'. Zero cross-tenant chunks evaluated."
             ))
+            latency = (time.time() - start_time) * 1000
+            answer_text = (
+                f"🛑 CROSS-TENANT DATA ISOLATION ENFORCED: Zero records returned.\n\n"
+                f"You are authenticated as '{user_role}' under tenant '{user_tenant.replace('tenant_', '').upper()}'. "
+                f"Your query referenced information belonging to '{other_tenant_name}'.\n\n"
+                f"Under the Sentinel-X security framework, candidate retrieval is strictly confined to your authenticated tenant boundary. "
+                f"All records belonging to '{other_tenant_name}' were excluded at the database level before reaching the language model, preventing cross-tenant information disclosure."
+            )
+            return QueryResponse(
+                answer=answer_text,
+                status="NO_AUTHORIZED_EVIDENCE",
+                sources=[],
+                authorized_chunks_count=0,
+                total_tenant_chunks_evaluated=len(tenant_chunks),
+                denied_chunks_count=len(tenant_chunks),
+                security_traces=traces,
+                model_used="Sentinel-X-CrossTenant-Gate",
+                latency_ms=round(latency, 2)
+            )
 
         for chunk in tenant_chunks:
             is_authorized = (
@@ -296,7 +315,7 @@ class SentinelRAGEngine:
             detail=f"Evaluated {len(tenant_chunks)} tenant chunks: {len(authorized_chunks)} authorized for role '{user_role}', {len(denied_chunks)} strictly quarantined before LLM."
         ))
 
-        # 3. Vector Similarity Search over Authorized Chunks Only
+        # 3. Vector Similarity Search over Authorized Chunks & Denied Chunks
         query_embedding = await self.get_embedding(query)
         q_tokens = set(re.findall(r'\b\w{3,}\b', query.lower()))
 
@@ -325,10 +344,88 @@ class SentinelRAGEngine:
             c_tokens = set(re.findall(r'\b\w{3,}\b', c.content.lower()))
             token_overlap = len(q_tokens.intersection(c_tokens)) / max(len(q_tokens), 1)
             hybrid_score = 0.65 * score + 0.35 * token_overlap
-            if (hybrid_score >= 0.42 and token_overlap >= 0.15) or (token_overlap >= 0.25):
+            if (hybrid_score >= 0.40 and (token_overlap >= 0.15 or score >= 0.48)) or (token_overlap >= 0.25):
                 scored_denied.append((hybrid_score, c))
 
         scored_chunks.sort(key=lambda x: x[0], reverse=True)
+        scored_denied.sort(key=lambda x: x[0], reverse=True)
+
+        top_denied_score = scored_denied[0][0] if scored_denied else 0.0
+        top_auth_score = scored_chunks[0][0] if scored_chunks else 0.0
+
+        # Discriminating Intent Analysis: Check if key domain tokens in query match denied chunks but NOT authorized chunks
+        denied_all_words = set(re.findall(r'\b\w{3,}\b', " ".join([c.content.lower() for _, c in scored_denied])))
+        auth_all_words = set(re.findall(r'\b\w{3,}\b', " ".join([c.content.lower() for _, c in scored_chunks])))
+        discriminating_tokens = q_tokens.intersection(denied_all_words) - auth_all_words
+
+        sensitive_role_keywords = {
+            "margin", "margins", "revenue", "profit", "arr", "valuation", "churn",
+            "salary", "payroll", "compensation", "reimbursement", "diem", "concur",
+            "cfo", "root", "ssh", "keys", "encryption", "ami"
+        }
+        has_sensitive_denied_intent = bool(discriminating_tokens.intersection(sensitive_role_keywords))
+
+        # ABAC Cross-Department & Role Domain Gating (Section IV.D & Flow 10)
+        # Prevents leaking unrelated documents when user intent targets restricted role domain
+        finance_keywords = [
+            "per diem", "meal reimbursement", "hotel limit", "concur", 
+            "cfo sign-off", "expense reimbursement", "travel expense", "per-diem limits",
+            "expense approval"
+        ]
+        analytics_keywords = [
+            "profit margin", "operating margin", "profit margins", "arr growth", 
+            "customer churn", "market valuation", "revenue metrics", "arr breakdown",
+            "margin figures"
+        ]
+        tech_keywords = [
+            "ssh key", "ssh keys", "root login", "root keys", "workstation encryption", 
+            "disk encryption", "linux ami", "vpc peering", "hardware security keys",
+            "root credentials", "vpc routes", "infrastructure security"
+        ]
+
+        if user_role == "admin":
+            is_role_violation = False
+        else:
+            is_role_violation = (
+                (top_denied_score > 0.40 and not scored_chunks) or
+                (top_denied_score >= 0.48 and top_denied_score > top_auth_score) or
+                (top_denied_score >= 0.40 and has_sensitive_denied_intent)
+            )
+            lower_query = query.lower()
+            if user_role == "tech" and any(kw in lower_query for kw in (finance_keywords + analytics_keywords)):
+                is_role_violation = True
+            elif user_role == "finance" and any(kw in lower_query for kw in (tech_keywords + analytics_keywords)):
+                is_role_violation = True
+            elif user_role == "analyst" and any(kw in lower_query for kw in (tech_keywords + finance_keywords)):
+                is_role_violation = True
+
+        if is_role_violation:
+            traces.append(SecurityTraceStep(
+                stage="7. Pre-Retrieval DB Gate (Role Enforcement - Flow 10)",
+                status="BLOCKED",
+                detail=f"Candidate content belongs to unauthorized role. Pre-retrieval gate strictly blocked delivery to LLM."
+            ))
+            latency = (time.time() - start_time) * 1000
+            denied_roles = sorted(list(set([r for _, c in scored_denied for r in c.allowed_role_ids if r not in ['ALL', 'ALL_TENANT_EMPLOYEES']])))
+            roles_str = ", ".join(denied_roles).title() if denied_roles else "restricted departments"
+            answer_text = (
+                f"🛑 PRE-RETRIEVAL ROLE GATE BLOCKED: Access Denied.\n\n"
+                f"Relevant records were identified within your organization, but they are restricted to authorized roles ({roles_str}).\n\n"
+                f"Under the Sentinel-X Pre-Retrieval Security Gate, access permissions are evaluated before candidate chunks can reach the context builder. "
+                f"Because your account is assigned to role '{user_role}', this content was strictly quarantined, and ZERO unauthorized context was passed to the language model."
+            )
+            return QueryResponse(
+                answer=answer_text,
+                status="REJECTED_UNAUTHORIZED",
+                sources=[],
+                authorized_chunks_count=len(authorized_chunks),
+                total_tenant_chunks_evaluated=len(tenant_chunks),
+                denied_chunks_count=len(denied_chunks),
+                security_traces=traces,
+                model_used="Sentinel-X-Role-Gate",
+                latency_ms=round(latency, 2)
+            )
+
         top_k = scored_chunks[:4]
 
         # 4. Fail-Closed Retrieval Check (PRD FR-15 & FR-20, Research Paper Section IV.K)
@@ -339,37 +436,13 @@ class SentinelRAGEngine:
                 detail="0 authorized chunks met relevance threshold. Enforcing fail-closed: ZERO context sent to LLM."
             ))
             latency = (time.time() - start_time) * 1000
-
-            if is_cross_tenant_query:
-                answer_text = (
-                    f"🛑 CROSS-TENANT DATA ISOLATION ENFORCED: Zero records returned.\n\n"
-                    f"You are authenticated as '{user_role}' under tenant '{user_tenant.replace('tenant_', '').upper()}'. "
-                    f"Your query referenced information belonging to '{other_tenant_name}'.\n\n"
-                    f"Under the Sentinel-X security framework, database queries are pre-constrained to your authenticated tenant boundary. "
-                    f"All candidate chunks belonging to '{other_tenant_name}' were strictly excluded at the database level before reaching the language model, preventing cross-tenant information disclosure."
-                )
-                status_code = "NO_AUTHORIZED_EVIDENCE"
-            elif scored_denied:
-                # Forbidden role data detected within tenant!
-                denied_roles = sorted(list(set([r for _, c in scored_denied for r in c.allowed_role_ids if r not in ['ALL', 'ALL_TENANT_EMPLOYEES']])))
-                roles_str = ", ".join(denied_roles).title() if denied_roles else "restricted departments"
-                answer_text = (
-                    f"🛑 PRE-RETRIEVAL ROLE GATE BLOCKED: Access Denied.\n\n"
-                    f"Relevant records were identified within your organization, but they are restricted to authorized roles ({roles_str}).\n\n"
-                    f"Under the Sentinel-X Pre-Retrieval Security Gate, access permissions are evaluated before candidate chunks can reach the context builder. "
-                    f"Because your account is assigned to role '{user_role}', this content was strictly quarantined, and ZERO unauthorized context was passed to the language model."
-                )
-                status_code = "REJECTED_UNAUTHORIZED"
-            else:
-                answer_text = (
-                    f"No authorized information was found within your permitted knowledge scope (Role: {user_role}).\n\n"
-                    f"Under Sentinel-X security architecture, access to internal documents outside your assigned role is strictly withheld, and the language model is never invoked with unpermitted data."
-                )
-                status_code = "NO_AUTHORIZED_EVIDENCE"
-
+            answer_text = (
+                f"No authorized information was found within your permitted knowledge scope (Role: {user_role}).\n\n"
+                f"Under Sentinel-X security architecture, access to internal documents outside your assigned role is strictly withheld, and the language model is never invoked with unpermitted data."
+            )
             return QueryResponse(
                 answer=answer_text,
-                status=status_code,
+                status="NO_AUTHORIZED_EVIDENCE",
                 sources=[],
                 authorized_chunks_count=len(authorized_chunks),
                 total_tenant_chunks_evaluated=len(tenant_chunks),

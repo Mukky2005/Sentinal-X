@@ -2,7 +2,7 @@ import json
 import os
 import uuid
 from typing import List, Dict, Any, Optional
-from .models import Tenant, Role, User, Document, DocumentChunk, AuditLog, ServiceRequestCreate
+from .models import Tenant, Role, User, Document, DocumentChunk, AuditLog, ServiceRequestCreate, Conversation, ConversationMessage
 from .config import DATABASE_PATH, AUDIT_LOGS_PATH, REQUESTS_PATH
 
 class SentinelDatabase:
@@ -14,10 +14,11 @@ class SentinelDatabase:
         self.chunks: List[DocumentChunk] = []
         self.audit_logs: List[AuditLog] = []
         self.service_requests: List[Dict[str, Any]] = []
+        self.conversations: Dict[str, Conversation] = {}
         self._load_or_seed()
 
     def _load_or_seed(self):
-        # Force reseed to populate Nexus and Amazon cleanly
+        # Force reseed to populate Nexus and Amazon cleanly with ABAC
         if os.path.exists(DATABASE_PATH):
             try:
                 with open(DATABASE_PATH, "r") as f:
@@ -105,6 +106,37 @@ class SentinelDatabase:
         self.service_requests.insert(0, item)
         self.save()
         return item
+
+    def get_or_create_conversation(self, tenant_id: str, user_id: str, conv_id: Optional[str] = None, title: Optional[str] = None) -> Conversation:
+        if conv_id and conv_id in self.conversations:
+            conv = self.conversations[conv_id]
+            # Verify tenant and user authorization on history access (Section IV.I)
+            if conv.tenant_id == tenant_id and (conv.user_id == user_id or user_id == "admin"):
+                return conv
+        new_id = conv_id or f"conv_{tenant_id}_{uuid.uuid4().hex[:8]}"
+        conv = Conversation(
+            id=new_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            title=title or "Knowledge Assistant Session"
+        )
+        self.conversations[new_id] = conv
+        return conv
+
+    def append_conversation_message(self, conv_id: str, tenant_id: str, user_id: str, sender: str, content: str, sources: List[Dict[str, Any]] = None, latency_ms: float = 0.0) -> ConversationMessage:
+        conv = self.get_or_create_conversation(tenant_id, user_id, conv_id)
+        msg = ConversationMessage(
+            conversation_id=conv.id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            sender=sender,
+            content=content,
+            sources=sources or [],
+            latency_ms=latency_ms
+        )
+        conv.messages.append(msg)
+        conv.updated_at = msg.timestamp
+        return msg
 
     def _seed_default_data(self):
         print("[SentinelDB] Initializing enterprise multi-tenant environment (Nexus & Amazon x 4 Roles)...")

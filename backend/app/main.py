@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
 import uuid
@@ -6,10 +6,15 @@ import time
 
 from .models import (
     Tenant, Role, User, Document, DocumentChunk,
-    QueryRequest, QueryResponse, AuditLog, ServiceRequestCreate
+    QueryRequest, QueryResponse, AuditLog, ServiceRequestCreate,
+    Conversation, ConversationMessage, AuthLoginRequest, TokenResponse
 )
 from .database import db
 from .rag_engine import SentinelRAGEngine
+from .pg_database import pg_db
+from .policy_engine import policy_engine
+from .document_parser import document_parser
+from .auth import token_manager, get_current_user_claims
 from .config import PORT, HOST
 
 app = FastAPI(
@@ -28,6 +33,10 @@ app.add_middleware(
 )
 
 rag_engine = SentinelRAGEngine()
+
+@app.on_event("startup")
+async def startup_event():
+    pg_db.init_db()
 
 # ----------------------------------------------------
 # System & Infrastructure Endpoints
@@ -221,20 +230,21 @@ async def upload_document(
     content: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     allowed_roles: str = Form(...), # comma-separated or "ALL"
-    uploaded_by: str = Form("admin")
+    uploaded_by: str = Form("admin"),
+    department: str = Form("general"), # ABAC Department attribute
+    classification_level: int = Form(1) # ABAC Clearance level (1-4)
 ):
     if tenant_id not in db.tenants:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
     file_name = file.filename if file else f"{title.lower().replace(' ', '_')[:30]}.txt"
     file_type = file.content_type if file and file.content_type else "text/plain"
+    threats_neutralized = 0
 
     if not content and file:
         file_bytes = await file.read()
-        try:
-            content = file_bytes.decode("utf-8")
-        except UnicodeDecodeError:
-            content = file_bytes.decode("latin-1", errors="ignore")
+        content, parse_meta = document_parser.parse_file(file_bytes, file_name, file_type)
+        threats_neutralized = parse_meta.get("threats_neutralized", 0)
 
     if not content or not content.strip():
         raise HTTPException(status_code=400, detail="Document file content cannot be empty")
@@ -253,6 +263,8 @@ async def upload_document(
         uploaded_by=uploaded_by,
         allowed_role_ids=roles_list,
         visibility_scope=visibility_scope,
+        department=department,
+        classification_level=classification_level,
         status="INDEXED"
     )
 
@@ -270,6 +282,8 @@ async def upload_document(
             content=c_text,
             allowed_role_ids=roles_list,
             visibility_scope=visibility_scope,
+            department=department,
+            classification_level=classification_level,
             embedding=emb,
             source_reference=f"Section {idx}.0"
         )
@@ -280,6 +294,10 @@ async def upload_document(
     db.chunks.extend(new_chunks)
     db.save()
 
+    reason = f"Document chunked into {len(new_chunks)} vectors with scope: {visibility_scope} [Dept: {department}, Clearance: {classification_level}]."
+    if threats_neutralized > 0:
+        reason += f" Neutralized {threats_neutralized} embedded prompt injection vectors."
+
     db.add_audit_log(
         tenant_id=tenant_id,
         user_id=uploaded_by,
@@ -287,11 +305,11 @@ async def upload_document(
         action="INGEST_DOCUMENT",
         resource=title,
         decision="INGESTED",
-        reason=f"Document chunked into {len(new_chunks)} vectors with scope: {visibility_scope}.",
-        metadata={"doc_id": doc_id, "roles": roles_list, "chunks": len(new_chunks)}
+        reason=reason,
+        metadata={"doc_id": doc_id, "roles": roles_list, "chunks": len(new_chunks), "sanitized": threats_neutralized > 0}
     )
 
-    return {"status": "SUCCESS", "document": doc, "chunks_created": len(new_chunks)}
+    return {"status": "SUCCESS", "document": doc, "chunks_created": len(new_chunks), "threats_neutralized": threats_neutralized}
 
 @app.delete("/api/documents/{doc_id}")
 def delete_document(doc_id: str):
@@ -315,6 +333,53 @@ def delete_document(doc_id: str):
         metadata={"doc_id": doc_id}
     )
     return {"status": "DELETED", "document_id": doc_id}
+
+# ----------------------------------------------------
+# Zero-Trust Identity & Authentication (Section IV.C)
+# ----------------------------------------------------
+@app.post("/api/auth/login", response_model=TokenResponse)
+def login_user(req: AuthLoginRequest):
+    user = next((u for u in db.users.values() if u.email.lower() == req.email.lower() and u.tenant_id == req.tenant_id), None)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid tenant membership credentials")
+    if not user.active:
+        raise HTTPException(status_code=403, detail="User account is deactivated")
+
+    claims = {
+        "user_id": user.id,
+        "tenant_id": user.tenant_id,
+        "role_id": user.role_id,
+        "role_name": user.role_name,
+        "department": user.department,
+        "clearance_level": user.clearance_level,
+        "is_admin": user.is_admin
+    }
+    token = token_manager.create_access_token(claims)
+    return TokenResponse(access_token=token, token_type="bearer", user=user)
+
+@app.get("/api/auth/me", response_model=User)
+def get_current_user_profile(authorization: Optional[str] = Header(None)):
+    claims = get_current_user_claims(authorization)
+    if not claims:
+        raise HTTPException(status_code=401, detail="Authentication token required")
+    user = db.users.get(claims.get("user_id"))
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+# ----------------------------------------------------
+# Tenant-Scoped Conversations (Section IV.I)
+# ----------------------------------------------------
+@app.get("/api/conversations", response_model=List[Conversation])
+def list_conversations(tenant_id: str, user_id: str):
+    return [c for c in db.conversations.values() if c.tenant_id == tenant_id and (c.user_id == user_id or user_id == "admin")]
+
+@app.get("/api/conversations/{conv_id}", response_model=Conversation)
+def get_conversation(conv_id: str, tenant_id: str, user_id: str):
+    conv = db.conversations.get(conv_id)
+    if not conv or conv.tenant_id != tenant_id or (conv.user_id != user_id and user_id != "admin"):
+        raise HTTPException(status_code=404, detail="Conversation session not found or unauthorized")
+    return conv
 
 # ----------------------------------------------------
 # Role-Constrained RAG Query Endpoint
@@ -358,6 +423,31 @@ async def query_knowledge_base(req: QueryRequest):
         all_chunks=db.chunks
     )
 
+    # Tenant-Scoped Conversation Persistence (Section IV.I)
+    conv = db.get_or_create_conversation(
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        conv_id=req.conversation_id,
+        title=req.query[:40]
+    )
+    db.append_conversation_message(
+        conv_id=conv.id,
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        sender="user",
+        content=req.query
+    )
+    db.append_conversation_message(
+        conv_id=conv.id,
+        tenant_id=user.tenant_id,
+        user_id=user.id,
+        sender="assistant",
+        content=response.answer,
+        sources=response.sources,
+        latency_ms=response.latency_ms
+    )
+    response.conversation_id = conv.id
+
     # Structured audit logging
     decision = "ALLOWED" if response.status == "SUCCESS" else ("BLOCKED" if "BLOCKED" in response.status else "FILTERED")
     db.add_audit_log(
@@ -372,7 +462,8 @@ async def query_knowledge_base(req: QueryRequest):
             "status": response.status,
             "latency_ms": response.latency_ms,
             "sources_count": len(response.sources),
-            "model": response.model_used
+            "model": response.model_used,
+            "conversation_id": conv.id
         }
     )
 
